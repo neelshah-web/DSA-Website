@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import { canRunCode } from "@/lib/auth";
+import { validateSolution, executeCode, formatExecutionResult } from "@/lib/judge0";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -109,288 +110,58 @@ export function CodeEditor({ problemId, starterCode, testCases }: CodeEditorProp
     setActiveTab("terminal");
     setTerminalOutput("Running code...\n");
 
-    // Simulate code execution with realistic terminal output
-    setTimeout(() => {
-      try {
-        // Validate code is not empty
-        const trimmedCode = code.trim();
-        if (!trimmedCode) {
-          throw new Error("Code cannot be empty. Please write your solution.");
-        }
-
-        // Check if code contains actual implementation
-        const hasImplementation = checkCodeImplementation(trimmedCode, selectedLanguage);
-        if (!hasImplementation) {
-          throw new Error("Please implement your solution. The function body appears to be empty or contains only comments.");
-        }
-
-        // Check for basic syntax errors based on language
-        const syntaxError = checkSyntaxErrors(trimmedCode, selectedLanguage);
-        if (syntaxError) {
-          throw new Error(syntaxError);
-        }
-
-        // Execute code and validate against test cases
-        const executionResult = executeCodeWithTestCases(trimmedCode, selectedLanguage, testCases);
-
-        if (executionResult.success) {
-          // Show actual code output in terminal
-          setTerminalOutput(executionResult.terminalOutput);
-
-          // Show test results in results section
-          setOutput(executionResult.resultsOutput);
-        } else {
-          throw new Error(executionResult.error);
-        }
-      } catch (err) {
-        // Show error in terminal with actual error details
-        const errorMsg = `$ node solution.${selectedLanguage === 'javascript' ? 'js' : selectedLanguage}
-${err}
-
-❌ Execution failed
-
-Please fix the error and try again.`;
-
-        setTerminalOutput(errorMsg);
-        setOutput(`❌ Failed\n\nError: ${err}\n\nPlease fix the error and try again.`);
-      } finally {
-        setIsRunning(false);
-      }
-    }, 1500);
+    // Use Judge0 API for real code execution
+    executeCodeWithJudge0();
   };
 
-  // Function to execute code and validate against test cases
-  const executeCodeWithTestCases = (code: string, language: string, testCases?: { input: string; expectedOutput: string }[]) => {
+  const executeCodeWithJudge0 = async () => {
     try {
-      // Simulate code execution and get actual output
-      const codeOutput = simulateCodeExecution(code, language, testCases);
+      // Validate code is not empty
+      const trimmedCode = code.trim();
+      if (!trimmedCode) {
+        throw new Error("Code cannot be empty. Please write your solution.");
+      }
 
-      // Validate outputs against expected results
+      setTerminalOutput("Compiling and executing code...\n");
+
       if (testCases && testCases.length > 0) {
-        const testResults = validateTestCases(codeOutput.outputs, testCases);
+        // Run test cases validation
+        const result = await validateSolution(trimmedCode, selectedLanguage, testCases);
+        setTerminalOutput(`$ Executing solution with ${testCases.length} test cases\n\n${result}`);
 
-        if (testResults.allPassed) {
-          return {
-            success: true,
-            terminalOutput: codeOutput.terminalOutput,
-            resultsOutput: `$ node solution.${language === 'javascript' ? 'js' : language}
-Compiling...
-✓ Compilation successful
-
-Running test cases...
-${testResults.results.map((result, index) =>
-              `Test Case ${index + 1}: ✓ PASSED (Runtime: ${result.runtime}, Memory: ${result.memory})`
-            ).join('\n')}
-
-All tests passed! 🎉
-Average Runtime: ${testResults.avgRuntime} (beats 85.2% of submissions)
-Average Memory: ${testResults.avgMemory} (beats 78.9% of submissions)`
-          };
+        // Check if all tests passed
+        const allPassed = result.includes('All test cases passed!');
+        if (allPassed) {
+          setOutput("✅ Success! All test cases passed.\n\nYour solution is correct!");
+          setActiveTab("output");
         } else {
-          const failedTest = testResults.results.find(r => !r.passed);
-          return {
-            success: false,
-            error: `Test Case ${failedTest?.index || 1} Failed: Expected "${failedTest?.expected}" but got "${failedTest?.actual}"`
-          };
+          setOutput("❌ Some test cases failed.\n\nPlease review your solution and try again.");
+          setActiveTab("output");
         }
       } else {
-        // No test cases provided, just show code output
-        return {
-          success: true,
-          terminalOutput: codeOutput.terminalOutput,
-          resultsOutput: "✅ Code executed successfully!\n\nNo test cases provided to validate against."
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error)
-      };
-    }
-  };
+        // Just run the code without test cases
+        const result = await executeCode(trimmedCode, selectedLanguage);
+        const formattedResult = formatExecutionResult(result);
+        setTerminalOutput(`$ Executing code\n\n${formattedResult}`);
 
-  // Simulate code execution and return outputs
-  const simulateCodeExecution = (code: string, language: string, testCases?: { input: string; expectedOutput: string }[]) => {
-    // This would normally execute the actual code
-    // For now, we'll simulate based on common patterns
-
-    let terminalOutput = `$ node solution.${language === 'javascript' ? 'js' : language}\n`;
-    const outputs: string[] = [];
-
-    if (testCases && testCases.length > 0) {
-      testCases.forEach((testCase, index) => {
-        // Simulate running each test case
-        const output = simulateTestCaseExecution(code, testCase.input, language);
-        outputs.push(output);
-        terminalOutput += `Test Case ${index + 1} Input: ${testCase.input}\n`;
-        terminalOutput += `Output: ${output}\n\n`;
-      });
-    } else {
-      // No test cases, just show that code ran
-      terminalOutput += "Code executed successfully.\n";
-      outputs.push("No output to display");
-    }
-
-    return { terminalOutput, outputs };
-  };
-
-  // Simulate execution of a single test case
-  const simulateTestCaseExecution = (code: string, input: string, language: string): string => {
-    // This is a simplified simulation
-    // In a real implementation, this would execute the actual code
-
-    if (language === 'javascript') {
-      // For common problems like Two Sum
-      if (code.includes('twoSum') && input.includes('[') && input.includes('target')) {
-        // Parse input like "[2,7,11,15], target = 9"
-        const match = input.match(/\[(.*?)\].*?(\d+)/);
-        if (match) {
-          const nums = match[1].split(',').map(n => parseInt(n.trim()));
-          const target = parseInt(match[2]);
-
-          // Simple two sum logic for simulation
-          for (let i = 0; i < nums.length; i++) {
-            for (let j = i + 1; j < nums.length; j++) {
-              if (nums[i] + nums[j] === target) {
-                return `[${i},${j}]`;
-              }
-            }
-          }
+        if (result.status.id === 3) {
+          setOutput("✅ Code executed successfully!");
+        } else {
+          setOutput(`❌ Execution failed: ${result.status.description}`);
         }
+        setActiveTab("output");
       }
+    } catch (err) {
+      const errorMsg = `❌ Execution Error\n\n${err}\n\nPlease fix the error and try again.`;
+      setTerminalOutput(errorMsg);
+      setOutput(errorMsg);
+      setError(String(err));
+      setActiveTab("output");
+    } finally {
+      setIsRunning(false);
     }
-
-    // Default fallback - return expected output for demo
-    return "[0,1]";
   };
 
-  // Validate test case outputs against expected results
-  const validateTestCases = (actualOutputs: string[], testCases: { input: string; expectedOutput: string }[]) => {
-    const results = testCases.map((testCase, index) => {
-      const actual = actualOutputs[index]?.trim() || "";
-      const expected = testCase.expectedOutput.trim();
-      const passed = actual === expected;
-
-      return {
-        index: index + 1,
-        passed,
-        actual,
-        expected,
-        runtime: `${Math.floor(Math.random() * 30) + 60}ms`,
-        memory: `${(Math.random() * 2 + 41).toFixed(1)}MB`
-      };
-    });
-
-    const allPassed = results.every(r => r.passed);
-    const avgRuntime = `${Math.floor(results.reduce((sum, r) => sum + parseInt(r.runtime), 0) / results.length)}ms`;
-    const avgMemory = `${(results.reduce((sum, r) => sum + parseFloat(r.memory), 0) / results.length).toFixed(1)}MB`;
-
-    return {
-      allPassed,
-      results,
-      avgRuntime,
-      avgMemory
-    };
-  };
-  // Helper function to check if code has actual implementation
-  const checkCodeImplementation = (code: string, language: string): boolean => {
-    // Remove comments and whitespace
-    let cleanCode = code;
-
-    if (language === 'javascript') {
-      // Remove single line comments
-      cleanCode = cleanCode.replace(/\/\/.*$/gm, '');
-      // Remove multi-line comments
-      cleanCode = cleanCode.replace(/\/\*[\s\S]*?\*\//g, '');
-      // Check if function body has actual code (not just empty braces or return statement)
-      const functionBodyMatch = cleanCode.match(/function.*?\{([\s\S]*)\}/);
-      if (functionBodyMatch) {
-        const functionBody = functionBodyMatch[1].trim();
-        return functionBody.length > 0 && !functionBody.match(/^\s*\/\/.*$/) && functionBody !== 'return;';
-      }
-    } else if (language === 'python') {
-      // Remove comments
-      cleanCode = cleanCode.replace(/#.*$/gm, '');
-      // Check if there's actual implementation beyond 'pass'
-      const lines = cleanCode.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-      const hasImplementation = lines.some(line =>
-        !line.startsWith('def ') &&
-        !line.startsWith('class ') &&
-        line !== 'pass' &&
-        !line.endsWith(':')
-      );
-      return hasImplementation;
-    } else if (language === 'java') {
-      // Remove comments
-      cleanCode = cleanCode.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      // Check if method body has implementation
-      const methodBodyMatch = cleanCode.match(/\{([\s\S]*)\}/);
-      if (methodBodyMatch) {
-        const methodBody = methodBodyMatch[1].trim();
-        return methodBody.length > 0 && methodBody !== 'return null;' && methodBody !== 'return new int[0];';
-      }
-    } else if (language === 'cpp') {
-      // Remove comments
-      cleanCode = cleanCode.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      // Check if function body has implementation
-      const functionBodyMatch = cleanCode.match(/\{([\s\S]*)\}/);
-      if (functionBodyMatch) {
-        const functionBody = functionBodyMatch[1].trim();
-        return functionBody.length > 0 && !functionBody.match(/^\s*return\s*.*;?\s*$/);
-      }
-    }
-
-    return true; // Default to true for unknown languages
-  };
-
-  // Helper function to check for syntax errors
-  const checkSyntaxErrors = (code: string, language: string): string | null => {
-    if (language === 'javascript') {
-      // Check for common JavaScript syntax errors
-      if (code.includes('var twoSum = function(nums, target)') && !code.includes('{')) {
-        return "SyntaxError: Missing opening brace '{'";
-      }
-      if ((code.match(/\{/g) || []).length !== (code.match(/\}/g) || []).length) {
-        return "SyntaxError: Mismatched braces";
-      }
-      if ((code.match(/\(/g) || []).length !== (code.match(/\)/g) || []).length) {
-        return "SyntaxError: Mismatched parentheses";
-      }
-    } else if (language === 'python') {
-      // Check for common Python syntax errors
-      const lines = code.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.trim().endsWith(':') && i === lines.length - 1) {
-          return `SyntaxError: Expected an indented block after line ${i + 1}`;
-        }
-        if (line.includes('def ') && !line.includes(':')) {
-          return `SyntaxError: Invalid function definition at line ${i + 1}`;
-        }
-      }
-    } else if (language === 'java') {
-      // Check for common Java syntax errors
-      if (!code.includes('class Solution')) {
-        return "CompileError: Class 'Solution' not found";
-      }
-      if ((code.match(/\{/g) || []).length !== (code.match(/\}/g) || []).length) {
-        return "CompileError: Mismatched braces";
-      }
-      if (!code.includes('public int[] twoSum') && !code.includes('public')) {
-        return "CompileError: Method must be public";
-      }
-    } else if (language === 'cpp') {
-      // Check for common C++ syntax errors
-      if (!code.includes('class Solution')) {
-        return "CompileError: Class 'Solution' not found";
-      }
-      if ((code.match(/\{/g) || []).length !== (code.match(/\}/g) || []).length) {
-        return "CompileError: Mismatched braces";
-      }
-    }
-
-    return null; // No syntax errors found
-  };
   const resetCode = () => {
     setCode(starterCode[selectedLanguage] || "");
     setOutput("");
