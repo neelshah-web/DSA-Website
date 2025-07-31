@@ -509,9 +509,17 @@ export const mockUser = {
   id: 'user-1',
   username: 'johndoe',
   email: 'john@example.com',
-  name: 'John Doe',
+  name: 'John Doe', 
   bio: 'Passionate programmer learning DSA',
-  avatar: 'https://i.pravatar.cc/300',
+  avatar: `data:image/svg+xml;base64,${btoa(`
+    <svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="50" fill="#4ECDC4"/>
+      <text x="50" y="50" font-family="Arial, sans-serif" font-size="36" font-weight="bold" 
+            text-anchor="middle" dominant-baseline="central" fill="white">
+        JD
+      </text>
+    </svg>
+  `)}`,
   joinedAt: new Date('2023-01-15'),
   solvedProblems: ['two-sum'],
   streak: 5,

@@ -11,6 +11,8 @@ import { AlertCircle } from "lucide-react";
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,17 +22,23 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First name and last name are required");
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords don't match");
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const success = await register(username, email, password);
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      const success = await register(username, email, password, fullName, firstName, lastName);
       if (success) {
         navigate("/");
       } else {
@@ -60,7 +68,29 @@ export default function RegisterPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            
+
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name</Label>
+              <Input
+                id="firstName"
+                placeholder="John"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name</Label>
+              <Input
+                id="lastName"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
@@ -71,7 +101,7 @@ export default function RegisterPage() {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -83,7 +113,7 @@ export default function RegisterPage() {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -94,7 +124,7 @@ export default function RegisterPage() {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirm Password</Label>
               <Input
@@ -106,7 +136,7 @@ export default function RegisterPage() {
               />
             </div>
           </CardContent>
-          
+
           <CardFooter className="flex flex-col space-y-4">
             <Button
               type="submit"
@@ -115,7 +145,7 @@ export default function RegisterPage() {
             >
               {isLoading ? "Creating account..." : "Register"}
             </Button>
-            
+
             <div className="text-center text-sm">
               Already have an account?{" "}
               <Link to="/login" className="text-primary hover:underline">
